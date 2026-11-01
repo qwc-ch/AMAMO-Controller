@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- 默认禁止明文 HTTP，仅放行格力云域名的明文（若未来云端走裸 TCP/明文测试用） -->
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">grih.gree.com</domain>
+        <domain includeSubdomains="true">gree.com</domain>
+    </domain-config>
+</network-security-config>

@@ -1,0 +1,21 @@
+# 与 cnb.cool 官方 Android 示例同款结构
+main:
+  push:
+    - docker:
+        image: mobiledevops/android-sdk-image:34.0.1
+        volumes:
+          - /root/.gradle:cow
+      stages:
+        - name: bootstrap-gradle-wrapper
+          script: |
+            if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
+              curl -sSLo /tmp/gradle.zip https://services.gradle.org/distributions/gradle-8.9-bin.zip
+              unzip -q /tmp/gradle.zip -d /tmp
+              /tmp/gradle-8.9/bin/gradle wrapper --gradle-version 8.9
+            fi
+        - name: test
+          script: ./gradlew testDebugUnitTest
+        - name: android-build
+          script: ./gradlew assembleDebug
+        - name: show-artifacts
+          script: ls -l app/build/outputs/apk/debug/
