@@ -21,7 +21,13 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // APK 瘦身：R8 压缩 + 资源收缩（无 native so，主要减 Compose 依赖体积）
+            isMinifyEnabled = true
+            isShrinkResources = true
+            // 本 App 无 .so，ABI 过滤实际收益为 0；留作将来引入原生库时的保险
+            ndk { abiFilters += listOf("arm64-v8a") }
+            // 个人自用（不商用、不分发）：release 挂 debug 签名，CI 出包可直接安装
+            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

@@ -37,8 +37,18 @@ jobs:
       - name: Assemble debug APK
         run: ./gradlew assembleDebug
 
-      - name: Upload APK
+      # 瘦身验证：release 走 R8 + 资源收缩，体积对比 debug
+      - name: Assemble release APK (minified)
+        run: ./gradlew assembleRelease
+
+      - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
           name: gree-remote-debug
           path: app/build/outputs/apk/debug/*.apk
+
+      - name: Upload release APK (R8 minified)
+        uses: actions/upload-artifact@v4
+        with:
+          name: gree-remote-release
+          path: app/build/outputs/apk/release/*.apk
