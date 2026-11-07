@@ -116,6 +116,46 @@ class RemoteViewModel(
     }
 
     /**
+     * 遥控器式开机：全量状态 + Pow=1 一条报文下发。
+     * 真机实测（2026-11）：单发 Pow=1 设备不刷新摆风等字段，导风板会停在异常位置
+     * （遥控器开机是全量下发，板子正常往下）。摆风等字段原样回写设备当前值，不人为改档。
+     */
+    fun powerOn() {
+        val s = session ?: return
+        if (_state.value.busy) return
+        val st = _state.value.state
+        val opts = listOf(
+            "Pow" to 1,
+            "Mod" to st.mode,
+            "SetTem" to kotlin.math.floor(st.decodedSetTemp()).toInt(),
+            "WdSpd" to st.windSpeed,
+            "Air" to st.air,
+            "Blo" to st.blowDry,
+            "Health" to st.health,
+            "SwhSlp" to st.sleep,
+            "Lig" to st.light,
+            "SwingLfRig" to st.swingLeftRight,
+            "SwUpDn" to st.swingUpDown,
+            "Quiet" to st.quiet,
+            "Tur" to st.turbo,
+            "StHt" to st.heatAux,
+            "TemUn" to st.tempUnit,
+            "HeatCoolType" to st.heatCoolType,
+            "TemRec" to st.temRec,
+            "SvSt" to st.saveEnergy,
+        )
+        viewModelScope.launch {
+            _state.value = _state.value.copy(busy = true, error = null)
+            try {
+                val newState = container.repository.lanCmdMulti(s, opts)
+                _state.value = _state.value.copy(state = newState, busy = false)
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(busy = false, error = e.message ?: "开机失败")
+            }
+        }
+    }
+
+    /**
      * 设定温度（支持 0.5℃）：
      * - 设备已用 TemRec 位（支持半度）→ SetTem + TemRec 一条报文组合下发；
      * - 不支持 → 仅 SetTem（自动取整）。

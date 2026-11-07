@@ -45,8 +45,13 @@ import java.util.Locale
 /** 模式：0 自动 / 1 制冷 / 2 除湿 / 3 送风 / 4 制热 */
 private val modes = listOf(0 to "自动", 1 to "制冷", 2 to "除湿", 3 to "送风", 4 to "制热")
 
-/** 风速：0 自动 ~ 3 高 */
-private val fanSpeeds = listOf(0 to "自动", 1 to "低风", 2 to "中风", 3 to "高风")
+/** 风速（标准表）：0 自动，1 低，3 中，5 高（2/4 仅五档机型，三档机型无效）。 */
+private val fanSpeeds = listOf(0 to "自动", 1 to "低风", 3 to "中风", 5 to "高风")
+
+/** 上下风向档位（标准表）：0 默认合拢，1 全程扫风，2~6 固定角度最上→最下。 */
+private val swingPositions = listOf(
+    0 to "合拢", 1 to "扫风", 2 to "最上", 3 to "中上", 4 to "居中", 5 to "中下", 6 to "最下",
+)
 
 /**
  * 单台设备遥控面板（嵌在首页设备分页内）。
@@ -158,13 +163,20 @@ private fun ConnectedControls(vm: RemoteViewModel, s: RemoteUiState) {
                     style = MaterialTheme.typography.titleLarge,
                 )
                 val modeLabel = modes.firstOrNull { it.first == st.mode }?.second ?: "自动"
+                val fanLabel = fanSpeeds.firstOrNull { it.first == st.windSpeed }?.second ?: "档位${st.windSpeed}"
                 Text(
-                    if (powered) "$modeLabel · 风速 ${fanSpeeds.firstOrNull { it.first == st.windSpeed }?.second ?: "自动"}"
+                    if (powered) "$modeLabel · 风速 $fanLabel"
                     else "打开开关启动空调",
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
-            Switch(checked = powered, onCheckedChange = { vm.send("Pow", if (it) 1 else 0) })
+            Switch(
+                checked = powered,
+                onCheckedChange = {
+                    // 开机走全量下发（遥控器式，导风板位置正常）；关机单字段即可
+                    if (it) vm.powerOn() else vm.send("Pow", 0)
+                },
+            )
         }
     }
 
@@ -209,12 +221,29 @@ private fun ConnectedControls(vm: RemoteViewModel, s: RemoteUiState) {
         }
     }
 
+    // ---- 上下风向（SwUpDn 档位单选，标准表 0~6；真机实测 6 = 最下）----
+    Text("上下风向", style = MaterialTheme.typography.titleSmall)
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        swingPositions.forEach { (value, label) ->
+            FilterChip(
+                selected = st.swingUpDown == value,
+                onClick = { vm.send("SwUpDn", value) },
+                enabled = !s.busy,
+                label = { Text(label) },
+            )
+        }
+    }
+
     // ---- 功能开关（FilterChip 组） ----
+    // 注：SwUpDn/SwingLfRig 仅 1 表示全程扫风，2~6 是固定角度档（标准表），
+    // 故"左右扫风"以 == 1 判断；上下风向已用档位单选呈现，不放开关。
     val toggles = listOf(
         ToggleDef("强劲", st.turbo == 1) { vm.send("Tur", if (st.turbo == 1) 0 else 1) },
         ToggleDef("静音", st.quiet == 1) { vm.send("Quiet", if (st.quiet == 1) 0 else 1) },
-        ToggleDef("上下扫风", st.swingUpDown != 0) { vm.send("SwUpDn", if (st.swingUpDown != 0) 0 else 1) },
-        ToggleDef("左右扫风", st.swingLeftRight != 0) { vm.send("SwingLfRig", if (st.swingLeftRight != 0) 0 else 1) },
+        ToggleDef("左右扫风", st.swingLeftRight == 1) { vm.send("SwingLfRig", if (st.swingLeftRight == 1) 0 else 1) },
         ToggleDef("电辅热", st.heatAux == 1) { vm.send("StHt", if (st.heatAux == 1) 0 else 1) },
         ToggleDef("干燥防霉", st.blowDry == 1) { vm.send("Blo", if (st.blowDry == 1) 0 else 1) },
         ToggleDef("负离子", st.health == 1) { vm.send("Health", if (st.health == 1) 0 else 1) },
