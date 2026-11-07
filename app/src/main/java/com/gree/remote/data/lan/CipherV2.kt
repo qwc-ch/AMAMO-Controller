@@ -44,14 +44,16 @@ object CipherV2 {
     }
 
     /**
-     * 解密：密文（base64）+ 可选 tag（base64）。tag 缺失时跳过 setAuthTag。
+     * 解密：密文（base64）+ 可选 tag（base64）。
+     * JCA 的 Cipher 没有 setAuthTag：外部传入的 tag 需拼回密文尾部一起交给 doFinal；
+     * tag 缺失时 GCM 会在 doFinal 校验阶段抛 AEADBadTagException。
      */
     fun decrypt(ciphertextB64: String, key: String, tagB64: String?): String {
+        val ciphertext = Base64.decode(ciphertextB64)
+        val tag = tagB64?.let { Base64.decode(it) }
+        val input = if (tag != null) ciphertext + tag else ciphertext
         val c = newCipher(Cipher.DECRYPT_MODE, key.toByteArray(Charsets.US_ASCII))
-        if (tagB64 != null) {
-            c.setAuthTag(Base64.decode(tagB64))
-        }
-        val plain = c.doFinal(Base64.decode(ciphertextB64))
+        val plain = c.doFinal(input)
         return String(plain, Charsets.UTF_8)
     }
 }

@@ -15,7 +15,7 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
-import kotlinx.serialization.json.stringOrNull
+import kotlinx.serialization.json.contentOrNull
 import java.io.IOException
 import java.net.DatagramPacket
 import java.net.DatagramSocket
@@ -86,19 +86,19 @@ class GreeLanClient(
         val text = String(resp.data, 0, resp.length, Charsets.UTF_8)
         val outer = json.parseToJsonElement(text).jsonObject
         // scan 响应是 pack 信封，pack 用通用密钥加密（V1）
-        val packB64 = outer["pack"]!!.jsonPrimitive.string
+        val packB64 = outer["pack"]!!.jsonPrimitive.content
         val innerJson = CipherV1.decrypt(Base64.decode(packB64), CipherV1.COMMON_KEY)
         val inner = json.parseToJsonElement(innerJson).jsonObject
         return ScannedDevice(
-            type = inner["t"]?.jsonPrimitive?.stringOrNull ?: "",
-            cid = inner["cid"]?.jsonPrimitive?.stringOrNull ?: "",
-            mac = inner["mac"]?.jsonPrimitive?.stringOrNull ?: "",
-            mid = inner["mid"]?.jsonPrimitive?.stringOrNull ?: "",
-            name = inner["name"]?.jsonPrimitive?.stringOrNull ?: "",
-            brand = inner["brand"]?.jsonPrimitive?.stringOrNull ?: "",
-            bc = inner["bc"]?.jsonPrimitive?.stringOrNull ?: "",
-            ver = inner["ver"]?.jsonPrimitive?.stringOrNull ?: "",
-            hid = inner["hid"]?.jsonPrimitive?.stringOrNull ?: "",
+            type = inner["t"]?.jsonPrimitive?.contentOrNull ?: "",
+            cid = inner["cid"]?.jsonPrimitive?.contentOrNull ?: "",
+            mac = inner["mac"]?.jsonPrimitive?.contentOrNull ?: "",
+            mid = inner["mid"]?.jsonPrimitive?.contentOrNull ?: "",
+            name = inner["name"]?.jsonPrimitive?.contentOrNull ?: "",
+            brand = inner["brand"]?.jsonPrimitive?.contentOrNull ?: "",
+            bc = inner["bc"]?.jsonPrimitive?.contentOrNull ?: "",
+            ver = inner["ver"]?.jsonPrimitive?.contentOrNull ?: "",
+            hid = inner["hid"]?.jsonPrimitive?.contentOrNull ?: "",
             pv = inner["pv"]?.jsonPrimitive?.intOrNull ?: 0,
             sub = inner["sub"]?.jsonPrimitive?.booleanOrNull ?: false,
             uid = inner["uid"]?.jsonPrimitive?.intOrNull ?: 0,
@@ -138,14 +138,14 @@ class GreeLanClient(
         val env = buildEnvelope(pack, tag, mac)
         val resp = sendToMac(mac, env, BIND_TIMEOUT_MS)
         val outer = json.parseToJsonElement(String(resp.data, 0, resp.length, Charsets.UTF_8)).jsonObject
-        val respPack = outer["pack"]!!.jsonPrimitive.string
-        val respTag = outer["tag"]?.jsonPrimitive?.stringOrNull
+        val respPack = outer["pack"]!!.jsonPrimitive.content
+        val respTag = outer["tag"]?.jsonPrimitive?.contentOrNull
         val plain = decryptInner(respPack, CipherV1.COMMON_KEY, ver, respTag)
         val obj = json.parseToJsonElement(plain).jsonObject
-        if (obj["t"]?.jsonPrimitive?.stringOrNull != "bindok") {
+        if (obj["t"]?.jsonPrimitive?.contentOrNull != "bindok") {
             throw IOException("bind returned non-bindok")
         }
-        return obj["key"]!!.jsonPrimitive.string
+        return obj["key"]!!.jsonPrimitive.content
     }
 
     /** 查询状态。 */
@@ -159,8 +159,8 @@ class GreeLanClient(
         val env = buildEnvelope(pack, tag, mac)
         val resp = sendToMac(mac, env, CMD_TIMEOUT_MS)
         val outer = json.parseToJsonElement(String(resp.data, 0, resp.length, Charsets.UTF_8)).jsonObject
-        val respPack = outer["pack"]!!.jsonPrimitive.string
-        val respTag = outer["tag"]?.jsonPrimitive?.stringOrNull
+        val respPack = outer["pack"]!!.jsonPrimitive.content
+        val respTag = outer["tag"]?.jsonPrimitive?.contentOrNull
         val plain = decryptInner(respPack, key, ver, respTag)
         val obj = json.parseToJsonElement(plain).jsonObject
         val dat = obj["dat"]!!.jsonObject
@@ -181,8 +181,8 @@ class GreeLanClient(
         val env = buildEnvelope(pack, tag, mac)
         val resp = sendToMac(mac, env, CMD_TIMEOUT_MS)
         val outer = json.parseToJsonElement(String(resp.data, 0, resp.length, Charsets.UTF_8)).jsonObject
-        val respPack = outer["pack"]!!.jsonPrimitive.string
-        val respTag = outer["tag"]?.jsonPrimitive?.stringOrNull
+        val respPack = outer["pack"]!!.jsonPrimitive.content
+        val respTag = outer["tag"]?.jsonPrimitive?.contentOrNull
         val plain = decryptInner(respPack, key, ver, respTag)
         val obj = json.parseToJsonElement(plain).jsonObject
         if (obj["r"]?.jsonPrimitive?.intOrNull != 200) {
