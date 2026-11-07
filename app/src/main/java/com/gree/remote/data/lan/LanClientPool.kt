@@ -16,14 +16,17 @@ class LanClientPool(
     context: Context,
 ) : AutoCloseable {
 
+    // 构造参数不能在成员函数中引用，先固化为属性
+    private val appContext: Context = context.applicationContext
+
     private val clients = ConcurrentHashMap<String, GreeLanClient>()
 
     /** 共享扫描实例（只做广播 scan，不参与 bind/status）。 */
-    val scanClient: GreeLanClient by lazy { GreeLanClient(json, context) }
+    val scanClient: GreeLanClient by lazy { GreeLanClient(json, appContext) }
 
     /** 取（或创建）某台设备的专属客户端。 */
     fun forMac(mac: String): GreeLanClient =
-        clients.getOrPut(mac) { GreeLanClient(json, context) }
+        clients.getOrPut(mac) { GreeLanClient(json, appContext) }
 
     override fun close() {
         clients.values.forEach { runCatching { it.close() } }
