@@ -15,53 +15,79 @@ import kotlinx.coroutines.launch
 data class RemoteUiState(
     val connecting: Boolean = false,
     val connected: Boolean = false,
-    val lanIp: String = "",
     val error: String? = null,
+    val busy: Boolean = false,          // 命令下发中（禁用控件防 UDP 乱序）
     val state: AcState = AcState(),
 )
 
 /**
- * 遥控页 ViewModel。进入即尝试局域网直连；支持手动填 IP。
- * 局域网模式完成 scan -> bind -> status，并以命令回包更新状态。
+ * 单台设备遥控 ViewModel（首页每设备一个分页各持一个实例，按 mac 作 key）。
+ * 进入分页即连接（bind -> status）并开始轮询；切走分页后 [setActive](false) 停轮询省电。
  */
-class RemoteViewModel(private val container: AppContainer) : ViewModel() {
+class RemoteViewModel(
+    private val container: AppContainer,
+    private val targetMac: String,
+    private val targetIp: String? = null,
+    private val firmwareVer: String? = null,
+) : ViewModel() {
 
     private val _state = MutableStateFlow(RemoteUiState())
     val state: StateFlow<RemoteUiState> = _state.asStateFlow()
 
     private var session: LanSession? = null
     private var pollJob: Job? = null
+    private var active = false
+
+    /** 分页可见性：true 恢复轮询，false 暂停。 */
+    fun setActive(v: Boolean) {
+        active = v
+        if (v && session != null) startPolling() else pollJob?.cancel()
+        // 首次激活且未连接过时发起连接
+        if (v && session == null && !_state.value.connecting && !_state.value.connected) {
+            connect()
+        }
+    }
 
     init {
+        // 创建即尝试连接（分页组合会紧接着调 setActive(true)）
         connect()
     }
 
-    fun onLanIpChange(v: String) {
-        _state.value = _state.value.copy(lanIp = v)
-    }
-
-    fun connect(manualIp: String? = null) {
+    fun connect() {
+        if (_state.value.connecting || session != null) return
         viewModelScope.launch {
             _state.value = _state.value.copy(connecting = true, error = null)
             try {
-                val s = container.repository.connectLan(manualIp ?: _state.value.lanIp.takeIf { it.isNotBlank() })
+                val s = container.repository.connectLan(
+                    manualIp = targetIp,
+                    targetMac = targetMac,
+                    firmwareVer = firmwareVer,
+                )
                 session = s
                 _state.value = _state.value.copy(connecting = false, connected = true, state = s.state)
-                startPolling()
+                if (active) startPolling()
             } catch (e: Exception) {
                 _state.value = _state.value.copy(
                     connecting = false,
                     connected = false,
-                    error = e.message ?: "局域网连接失败，请检查 WiFi 或在云端模式重试",
+                    error = e.message ?: "局域网连接失败，请确认手机与空调在同一 WiFi",
                 )
             }
         }
     }
 
+    /** 重置会话并重连（换网络/失败恢复）。 */
+    fun reconnect() {
+        session = null
+        pollJob?.cancel()
+        _state.value = _state.value.copy(connected = false)
+        connect()
+    }
+
     private fun startPolling() {
         pollJob?.cancel()
         pollJob = viewModelScope.launch {
-            while (true) {
+            while (active) {
                 delay(4000)
                 val s = session ?: break
                 try {
@@ -77,19 +103,50 @@ class RemoteViewModel(private val container: AppContainer) : ViewModel() {
     /** 下发命令。opt = 字段名，value = 值。 */
     fun send(opt: String, value: Int) {
         val s = session ?: return
+        if (_state.value.busy) return
         viewModelScope.launch {
+            _state.value = _state.value.copy(busy = true, error = null)
             try {
                 val st = container.repository.lanCmd(s, opt, value)
-                _state.value = _state.value.copy(state = st)
+                _state.value = _state.value.copy(state = st, busy = false)
             } catch (e: Exception) {
-                _state.value = _state.value.copy(error = e.message ?: "命令下发失败")
+                _state.value = _state.value.copy(busy = false, error = e.message ?: "命令下发失败")
+            }
+        }
+    }
+
+    /**
+     * 设定温度（支持 0.5℃）：
+     * - 设备已用 TemRec 位（支持半度）→ SetTem + TemRec 一条报文组合下发；
+     * - 不支持 → 仅 SetTem（自动取整）。
+     */
+    fun setTemp(value: Double) {
+        val s = session ?: return
+        if (_state.value.busy) return
+        val clamped = value.coerceIn(MIN_TEMP, MAX_TEMP)
+        val st = _state.value.state
+        val opts = mutableListOf("SetTem" to kotlin.math.floor(clamped).toInt())
+        if (st.temRec == 1) {
+            opts += "TemRec" to if (clamped % 1.0 != 0.0) 1 else 0
+        }
+        viewModelScope.launch {
+            _state.value = _state.value.copy(busy = true, error = null)
+            try {
+                val newState = container.repository.lanCmdMulti(s, opts)
+                _state.value = _state.value.copy(state = newState, busy = false)
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(busy = false, error = e.message ?: "温度设置失败")
             }
         }
     }
 
     override fun onCleared() {
         pollJob?.cancel()
-        container.repository.close()
         super.onCleared()
+    }
+
+    companion object {
+        const val MIN_TEMP = 16.0
+        const val MAX_TEMP = 30.0
     }
 }

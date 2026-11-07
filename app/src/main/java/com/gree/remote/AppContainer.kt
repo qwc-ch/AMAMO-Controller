@@ -4,10 +4,11 @@ import android.content.Context
 import com.gree.remote.data.cloud.CloudSigner
 import com.gree.remote.data.cloud.GreeCloudApi
 import com.gree.remote.data.cloud.GreeCloudClient
-import com.gree.remote.data.lan.GreeLanClient
+import com.gree.remote.data.lan.LanClientPool
 import com.gree.remote.data.repo.AcRepository
 import com.gree.remote.data.storage.PrefsStore
 import com.gree.remote.data.storage.SecureStorage
+import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -62,10 +63,10 @@ class AppContainer(context: Context) {
         )
     }
 
-    val lanClient: GreeLanClient by lazy { GreeLanClient(json) }
+    val lanPool: LanClientPool by lazy { LanClientPool(json, context) }
 
     val repository: AcRepository by lazy {
-        AcRepository(lanClient = lanClient, cloudClient = cloudClient)
+        AcRepository(lanPool = lanPool, cloudClient = cloudClient)
     }
 
     /** 保存云端账号凭据（Keystore 加密）。 */
@@ -75,6 +76,19 @@ class AppContainer(context: Context) {
     }
 
     fun hasSavedUser(): Boolean = secure.get(KEY_USER) != null
+
+    /** 登出：清除云端凭据。 */
+    fun clearCredentials() {
+        secure.remove(KEY_USER)
+        secure.remove(KEY_PASS)
+    }
+
+    /** 动态取色（Material You）偏好，供设置页开关。 */
+    val dynamicColor: Flow<Boolean> = prefs.dynamicColor
+
+    suspend fun setDynamicColor(enabled: Boolean) {
+        prefs.setDynamicColor(enabled)
+    }
 
     companion object {
         private const val KEY_USER = "cloud_user"

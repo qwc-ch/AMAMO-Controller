@@ -3,6 +3,7 @@ package com.gree.remote.data.storage
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -21,6 +22,14 @@ class PrefsStore(private val context: Context) {
         val CHANNEL_PREF = stringPreferencesKey("channel_pref") // lan / cloud / auto
         val LAST_MAC = stringPreferencesKey("last_mac")
         val DEVICE_CACHE = stringPreferencesKey("device_cache")
+        val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color") // Material You 取色开关
+    }
+
+    /** 动态取色开关（API 31+ 生效），默认开。 */
+    val dynamicColor: Flow<Boolean> = context.dataStore.data.map { it[Keys.DYNAMIC_COLOR] ?: true }
+
+    suspend fun setDynamicColor(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.DYNAMIC_COLOR] = enabled }
     }
 
     val channelPref: Flow<String> = context.dataStore.data.map { it[Keys.CHANNEL_PREF] ?: "auto" }

@@ -17,3 +17,5 @@ local.properties
 
 # 敏感信息（绝不上传）
 *_secrets*
+# 本地 agent 技能目录（不进仓库）
+.agents/

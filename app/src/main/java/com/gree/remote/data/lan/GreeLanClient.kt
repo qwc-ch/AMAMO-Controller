@@ -1,5 +1,7 @@
 package com.gree.remote.data.lan
 
+import android.content.Context
+import android.net.wifi.WifiManager
 import com.gree.remote.data.model.AcState
 import com.gree.remote.data.model.CipherVersion
 import com.gree.remote.data.model.ScannedDevice
@@ -12,6 +14,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -19,6 +22,8 @@ import kotlinx.serialization.json.contentOrNull
 import java.io.IOException
 import java.net.DatagramPacket
 import java.net.DatagramSocket
+import java.net.InetAddress
+import java.net.SocketTimeoutException
 
 /**
  * 格力局域网协议客户端：scan -> bind -> status / cmd 状态机。
@@ -27,15 +32,20 @@ import java.net.DatagramSocket
  * 参考实现（协议源头）：
  *  - tomikaa87/gree-remote（scan/bind/status/cmd 报文与 AES-ECB）
  *  - inwaar/gree-hvac-client（AES-GCM 适配，bind 时 ECB 先、GCM 兜底）
+ *
+ * ⚠️ Android 坑：系统默认过滤组播/广播包，收 UDP 广播响应必须持有
+ * [WifiManager.MulticastLock]（权限 CHANGE_WIFI_MULTICAST_STATE 已声明），
+ * 否则会出现"PC 能扫到、手机扫不到"。所有 scan 均在锁内进行。
  */
 class GreeLanClient(
     private val json: Json,
+    context: Context,
 ) {
     companion object {
         const val PORT = 7000
         const val BROADCAST_ADDR = "255.255.255.255"
         private const val APP_CID = "app"
-        private const val SCAN_TIMEOUT_MS = 800L
+        private const val SCAN_PACKET_TIMEOUT_MS = 500L
         private const val BIND_TIMEOUT_MS = 3000L
         private const val CMD_TIMEOUT_MS = 1500L
 
@@ -49,29 +59,72 @@ class GreeLanClient(
 
     private val socket = DatagramSocket().apply { broadcast = true }
 
+    /** 组播锁：scan 期间持有，结束即释放（引用计数模式）。 */
+    private val multicastLock: WifiManager.MulticastLock =
+        (context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager)
+            .createMulticastLock("AMAMO-lan-scan")
+            .apply { setReferenceCounted(true) }
+
     /** 最近一次 scan 到的设备 IP（用于后续单播）。 */
     @Volatile
     private var deviceIp: String? = null
 
     /**
-     * 广播发现设备。返回设备 MAC（大写十六进制无冒号）与响应包。
+     * status/cmd 实际生效的密钥缓存（本实例按设备绑定）。
+     * ⚠️ 真机实测（V3.4.M，mac c0…8dc8）：bind 返回设备专属 key，但 status/cmd 仍用
+     * V1 通用密钥（用专属 key 设备不应答）。因此请求先用 bind key，超时自动换通用密钥，
+     * 成功后缓存生效组合，后续命令不再试错。
      */
-    suspend fun scan(): ScannedDevice {
-        val resp = withContext(Dispatchers.IO) {
-            val scan = buildJsonObject { put("t", "scan") }
-            val bytes = scan.toString().toByteArray(Charsets.UTF_8)
-            val broadcast = java.net.InetAddress.getByName(BROADCAST_ADDR)
-            val pkt = DatagramPacket(bytes, bytes.size, broadcast, PORT)
-            socket.soTimeout = SCAN_TIMEOUT_MS.toInt()
-            socket.send(pkt)
-            val buf = ByteArray(2048)
-            val recv = DatagramPacket(buf, buf.size)
-            socket.receive(recv)
-            recv
+    @Volatile
+    private var effectiveKey: Pair<String, CipherVersion>? = null
+
+    /**
+     * 广播发现设备（单台便捷入口）：广播一次，取最先应答的设备。
+     */
+    suspend fun scan(): ScannedDevice =
+        scanAll(timeoutMs = 1500L).firstOrNull()?.device
+            ?: throw IOException("未发现局域网空调，请确认手机与空调在同一 WiFi")
+
+    /**
+     * 广播发现全部设备：广播一次，在 [timeoutMs] 窗口内收集所有去重后的响应。
+     * @return 设备信息 + 应答来源 IP（后续单播 bind/status 用）。
+     */
+    suspend fun scanAll(timeoutMs: Long = 2000L): List<LanScanResult> =
+        withContext(Dispatchers.IO) {
+            multicastLock.acquire()
+            try {
+                val scan = buildJsonObject { put("t", "scan") }
+                val bytes = scan.toString().toByteArray(Charsets.UTF_8)
+                val broadcast = InetAddress.getByName(BROADCAST_ADDR)
+                val pkt = DatagramPacket(bytes, bytes.size, broadcast, PORT)
+                socket.soTimeout = SCAN_PACKET_TIMEOUT_MS.toInt()
+                socket.send(pkt)
+
+                val deadline = System.currentTimeMillis() + timeoutMs
+                val found = LinkedHashMap<String, LanScanResult>()
+                val buf = ByteArray(2048)
+                while (System.currentTimeMillis() < deadline) {
+                    val recv = DatagramPacket(buf, buf.size)
+                    try {
+                        socket.receive(recv)
+                    } catch (_: SocketTimeoutException) {
+                        continue // 等待窗口内继续收
+                    }
+                    val ip = recv.address.hostAddress ?: continue
+                    val dev = try {
+                        parseScan(recv)
+                    } catch (_: Exception) {
+                        continue // 非设备应答/坏包，跳过
+                    }
+                    if (dev.mac.isNotBlank() && !found.containsKey(dev.mac)) {
+                        found[dev.mac] = LanScanResult(device = dev, ip = ip)
+                    }
+                }
+                found.values.toList()
+            } finally {
+                if (multicastLock.isHeld) multicastLock.release()
+            }
         }
-        deviceIp = resp.address?.hostAddress
-        return parseScan(resp)
-    }
 
     /** 手动指定设备 IP（应对 AP 隔离/多 AP 场景）。 */
     fun setDeviceIp(ip: String) {
@@ -148,8 +201,20 @@ class GreeLanClient(
         return obj["key"]!!.jsonPrimitive.content
     }
 
-    /** 查询状态。 */
+    /** 查询状态。bind key 无应答时自动换 V1 通用密钥兜底（见 [effectiveKey] 注释）。 */
     suspend fun status(mac: String, key: String, ver: CipherVersion): AcState {
+        val (k, v) = effectiveKey ?: (key to ver)
+        return try {
+            statusWith(mac, k, v).also { effectiveKey = k to v }
+        } catch (e: Exception) {
+            if (k == CipherV1.COMMON_KEY && v == CipherVersion.V1) throw e
+            statusWith(mac, CipherV1.COMMON_KEY, CipherVersion.V1).also {
+                effectiveKey = CipherV1.COMMON_KEY to CipherVersion.V1
+            }
+        }
+    }
+
+    private suspend fun statusWith(mac: String, key: String, ver: CipherVersion): AcState {
         val inner = buildJsonObject {
             put("cols", json.encodeToJsonElement(STATUS_COLS))
             put("mac", mac)
@@ -163,15 +228,60 @@ class GreeLanClient(
         val respTag = outer["tag"]?.jsonPrimitive?.contentOrNull
         val plain = decryptInner(respPack, key, ver, respTag)
         val obj = json.parseToJsonElement(plain).jsonObject
-        val dat = obj["dat"]!!.jsonObject
-        return parseDat(dat)
+        return parseStatusDat(obj)
     }
 
-    /** 下发控制命令。opt = 字段名，p = 值。 */
-    suspend fun cmd(mac: String, key: String, ver: CipherVersion, opt: String, value: Int) {
+    /**
+     * 解析 status 响应的 dat，兼容两种真实设备形态：
+     * - 对象形式：{"dat": {"Pow":1, "SetTem":26, ...}}（部分新固件）；
+     * - 数组形式：{"cols": [...], "dat": [1, 26, ...]}（旧固件常见，gree-remote 文档形态）。
+     */
+    private fun parseStatusDat(obj: JsonObject): AcState =
+        when (val dat = obj["dat"]) {
+            is JsonObject -> json.decodeFromJsonElement(AcState.serializer(), dat)
+            is kotlinx.serialization.json.JsonArray -> {
+                val cols = obj["cols"]?.jsonArray
+                    ?.map { it.jsonPrimitive.content }
+                    ?: throw IOException("status array response missing cols")
+                val values = dat.map { it.jsonPrimitive.intOrNull ?: 0 }
+                if (cols.size != values.size) throw IOException("status cols/dat size mismatch")
+                val map = buildJsonObject {
+                    cols.zip(values).forEach { (name, value) -> put(name, value) }
+                }
+                json.decodeFromJsonElement(AcState.serializer(), map)
+            }
+            else -> throw IOException("unexpected status dat type")
+        }
+
+    /** 下发控制命令。opt = 字段名，p = 值。key 兜底逻辑同 [status]。 */
+    suspend fun cmd(mac: String, key: String, ver: CipherVersion, opt: String, value: Int) =
+        cmd(mac, key, ver, listOf(opt to value))
+
+    /**
+     * 批量下发控制命令：opt/p 数组一次报文完成（如 SetTem + TemRec 半度组合）。
+     * 命令值为绝对值（幂等），兜底重发安全。
+     */
+    suspend fun cmd(mac: String, key: String, ver: CipherVersion, opts: List<Pair<String, Int>>) {
+        val (k, v) = effectiveKey ?: (key to ver)
+        try {
+            cmdWith(mac, k, v, opts).also { effectiveKey = k to v }
+        } catch (e: Exception) {
+            if (k == CipherV1.COMMON_KEY && v == CipherVersion.V1) throw e
+            cmdWith(mac, CipherV1.COMMON_KEY, CipherVersion.V1, opts).also {
+                effectiveKey = CipherV1.COMMON_KEY to CipherVersion.V1
+            }
+        }
+    }
+
+    private suspend fun cmdWith(
+        mac: String,
+        key: String,
+        ver: CipherVersion,
+        opts: List<Pair<String, Int>>,
+    ) {
         val inner = buildJsonObject {
-            put("opt", opt)
-            put("p", value)
+            put("opt", json.encodeToJsonElement(opts.map { it.first }))
+            put("p", json.encodeToJsonElement(opts.map { it.second }))
             put("t", "cmd")
             put("sub", false)
             put("mac", mac)
@@ -189,10 +299,6 @@ class GreeLanClient(
             throw IOException("cmd rejected: $plain")
         }
     }
-
-    /** 从 status 响应的 dat 对象解码为 AcState。 */
-    private fun parseDat(dat: JsonObject): AcState =
-        json.decodeFromJsonElement(AcState.serializer(), dat)
 
     // ---- 报文编解码辅助 ----
 
@@ -257,3 +363,9 @@ class GreeLanClient(
         socket.close()
     }
 }
+
+/** 一次局域网扫描应答：设备信息 + 来源 IP。 */
+data class LanScanResult(
+    val device: ScannedDevice,
+    val ip: String,
+)

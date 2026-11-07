@@ -11,8 +11,8 @@ import kotlinx.serialization.Serializable
 data class AcState(
     @SerialName("Pow") val power: Int = 0,
     @SerialName("Mod") val mode: Int = 0,             // 0 自动 1 制冷 2 除湿 3 送风 4 制热
-    @SerialName("SetTem") val setTemp: Int = 26,      // 设定温度（十六进制，需解码）
-    @SerialName("TemSen") val roomTemp: Int = 0,      // 室温（十六进制，部分固件上报）
+    @SerialName("SetTem") val setTemp: Int = 26,      // 设定温度（摄氏整数值，16..30）
+    @SerialName("TemSen") val roomTemp: Int = 0,      // 室温原始值（实际摄氏 + 40，部分固件上报）
     @SerialName("WdSpd") val windSpeed: Int = 0,      // 0 自动 ~ 5 高
     @SerialName("SwUpDn") val swingUpDown: Int = 0,   // 上下扫风
     @SerialName("SwingLfRig") val swingLeftRight: Int = 0, // 左右扫风
@@ -29,9 +29,19 @@ data class AcState(
     @SerialName("HeatCoolType") val heatCoolType: Int = 0,
     @SerialName("TemRec") val temRec: Int = 0,        // 余温回收
 ) {
-    /** 设定温度（摄氏）：设备端 SetTem 的数值即摄氏温度（16..30），无需换算。 */
-    fun decodedSetTemp(): Int = setTemp
+    /**
+     * 设定温度（摄氏，含半度精度）：
+     * SetTem 在摄氏下即整数温度值（16..30），TemRec=1 表示 +0.5℃（新固件 Add0.5 位）。
+     */
+    fun decodedSetTemp(): Double = setTemp + if (temRec == 1) 0.5 else 0.0
 
-    /** 室温（摄氏）：部分固件上报 TemSen 数值即摄氏温度；0 表示未上报。 */
-    fun decodedRoomTemp(): Int = roomTemp
+    /**
+     * 室温（摄氏）：对照 gree-remote 协议，TemSen 上报值 = 实际摄氏 + 40
+     * （设备为避免负数做的偏移），如 65 → 25℃。
+     * 原始值 <=40（含 0）视为未上报/无效，返回 null。
+     */
+    fun decodedRoomTemp(): Int? = roomTemp.takeIf { it >= 41 }?.let { it - 40 }
+
+    /** 设备是否支持 0.5℃ 步进（TemRec 位生效）。 */
+    fun supportsHalfDegree(): Boolean = temRec == 1
 }

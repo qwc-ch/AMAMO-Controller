@@ -6,9 +6,11 @@
 
 ## 特性
 
-- **双通道控制**：优先局域网 UDP 直连（低延迟、不耗云配额），失败自动降级到格力云（`grih.gree.com`），跨网络可用。
-- **V1/V2 加密自动协商**：bind 时先 V1（AES-ECB）再 V2（AES-GCM）兜底，适配新旧固件。
-- **Material 3 Expressive** UI：模式 ButtonGroup、温度大按钮、按压形状变形、Material You 动态取色。
+- **双通道**：优先局域网 UDP 直连（低延迟、不耗云配额），跨网络可用；云端设备列表同步（可选登录）。云端「控制命令」端点待抓包定案。
+- **V1/V2 加密自动协商**：bind 按固件版本预判代际（>=1.21 优先 V2/AES-GCM），失败自动兜底另一代，适配新旧固件。
+- **多设备并行**：首页每台设备一个分页，每设备独立 UDP 客户端（`LanClientPool`），分页切走自动暂停轮询。
+- **Material 3 Expressive 设计**：HCT 生成的品牌蓝紫配色（回退方案）、表达力字阶/形状、spring 弹性动效（温度弹跳、扫描旋转）、Material You 动态取色（设置页可关）。
+- **免登录启动**：应用直达首页（局域网扫描 + 设备分页），云端登录改为设置页内的可选弹窗。
 - **云端签名**：按公开逆向实现注入 `api/datVc`，支持 402 自动重登。
 - **构建走云端 CI**（GitHub Actions / CNB），本地不装 Android 环境，push 即出 debug APK。
 
@@ -18,17 +20,21 @@
 app/src/main/java/com/gree/remote/
 ├── GreeRemoteApp.kt / MainActivity.kt / AppContainer.kt   # 入口 + 手动 DI
 ├── data/
-│   ├── model/     # AcState、AcDevice、ScannedDevice、CipherVersion
-│   ├── lan/       # GreeLanClient（scan/bind/status/cmd）、CipherV1/V2、LanTransport
+│   ├── model/     # AcState（室温+40偏移/TemRec半度解码）、AcDevice、ScannedDevice、CipherVersion
+│   ├── lan/       # GreeLanClient（scan/bind/status/cmd）、LanClientPool（每设备一实例）、CipherV1/V2
 │   ├── cloud/     # CloudSigner、GreeCloudApi（Retrofit）、GreeCloudClient（402 重登）
-│   ├── repo/      # AcRepository（双通道策略）
-│   └── storage/   # PrefsStore（DataStore）、SecureStorage（Keystore）
+│   ├── repo/      # AcRepository（双通道策略、scanLan 纯扫描）
+│   └── storage/   # PrefsStore（DataStore，动态取色偏好）、SecureStorage（Keystore）
 └── ui/
-    ├── login/     # 登录页
-    ├── devices/   # 设备列表页
-    ├── remote/    # 遥控页
-    └── theme/     # M3E 主题
+    ├── GreeRemoteRoot.kt  # 底部导航（首页/设置）
+    ├── home/      # 首页：局域网扫描 + 每设备一个分页（TabRow）内嵌遥控面板
+    ├── remote/    # 遥控面板组件 + 每设备 ViewModel
+    ├── settings/  # 设置页：通用（动态取色）/ 云端账号 / 关于 三个子分页
+    └── theme/     # MD3E 主题（Color/Type/Shape/Motion）
 ```
+
+测试辅助脚本（本机回环，不接触真实空调）：`tools/mock_device.mjs`（模拟 V1/V2 两台设备）、
+`tools/protocol_flow_test.mjs`（协议全流程 13 项断言）、`tools/scan_device.mjs`（真机只读扫描）。
 
 ## 构建
 

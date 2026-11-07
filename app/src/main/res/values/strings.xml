@@ -1,5 +1,3 @@
 <resources>
     <string name="app_name">AMAMO Controller</string>
-    <string name="tab_lan">局域网</string>
-    <string name="tab_cloud">云端</string>
 </resources>
