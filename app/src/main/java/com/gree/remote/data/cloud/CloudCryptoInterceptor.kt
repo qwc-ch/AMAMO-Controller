@@ -8,6 +8,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
 import java.io.IOException
@@ -37,7 +38,7 @@ class CloudCryptoInterceptor : Interceptor {
             .header("Content-Type", "application/x-www-form-urlencoded")
             .header("Gaen1", CloudSigner.GAE1)
             .header("Charset", "utf-8")
-            .method(original.method, encrypted.toByteArray(Charsets.UTF_8).toResponseBody(FORM_TYPE))
+            .method(original.method, encrypted.toByteArray(Charsets.UTF_8).toRequestBody(FORM_TYPE))
             .build()
 
         val response = chain.proceed(req)
