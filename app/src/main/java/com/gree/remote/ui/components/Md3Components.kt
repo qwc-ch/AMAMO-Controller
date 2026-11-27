@@ -155,8 +155,9 @@ fun EditorialCard(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        content = content,
-    )
+    ) {
+        content()
+    }
 }
 
 /** 状态徽标：pill + container 色，颜色之外还有文字，不依赖 color-only。 */
