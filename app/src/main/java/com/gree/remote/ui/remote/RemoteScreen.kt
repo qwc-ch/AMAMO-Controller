@@ -222,6 +222,7 @@ private fun ConnectedControls(vm: RemoteViewModel, s: RemoteUiState) {
     }
 
     // ---- 上下风向（SwUpDn 档位单选，标准表 0~6；真机实测 6 = 最下）----
+    // 子母导风板机型必须全量下发（setSwingUpDown），单字段只动子板、母板不动。
     Text("上下风向", style = MaterialTheme.typography.titleSmall)
     FlowRow(
         modifier = Modifier.fillMaxWidth(),
@@ -230,7 +231,7 @@ private fun ConnectedControls(vm: RemoteViewModel, s: RemoteUiState) {
         swingPositions.forEach { (value, label) ->
             FilterChip(
                 selected = st.swingUpDown == value,
-                onClick = { vm.send("SwUpDn", value) },
+                onClick = { vm.setSwingUpDown(value) },
                 enabled = !s.busy,
                 label = { Text(label) },
             )

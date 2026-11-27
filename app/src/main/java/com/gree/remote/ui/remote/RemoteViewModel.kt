@@ -116,16 +116,14 @@ class RemoteViewModel(
     }
 
     /**
-     * 遥控器式开机：全量状态 + Pow=1 一条报文下发。
-     * 真机实测（2026-11）：单发 Pow=1 设备不刷新摆风等字段，导风板会停在异常位置
-     * （遥控器开机是全量下发，板子正常往下）。摆风等字段原样回写设备当前值，不人为改档。
+     * 构造“遥控器式全量报文”的字段列表（当前状态原样回写，不含只读的室温）。
+     * 真机实测（2026-11）：格力子母导风板机型（如臻焕风 KFR-35GW/35572）
+     * 单字段改 SwUpDn 只动子板、母板不动；必须全量下发（模拟遥控器）母板才联动。
+     * 因此摆风/开机都走这条路径。
      */
-    fun powerOn() {
-        val s = session ?: return
-        if (_state.value.busy) return
-        val st = _state.value.state
-        val opts = listOf(
-            "Pow" to 1,
+    private fun fullStateOpts(st: AcState, overrides: Map<String, Int> = emptyMap()): List<Pair<String, Int>> {
+        val base = listOf(
+            "Pow" to st.power,
             "Mod" to st.mode,
             "SetTem" to kotlin.math.floor(st.decodedSetTemp()).toInt(),
             "WdSpd" to st.windSpeed,
@@ -144,6 +142,18 @@ class RemoteViewModel(
             "TemRec" to st.temRec,
             "SvSt" to st.saveEnergy,
         )
+        return base.map { (k, v) -> k to (overrides[k] ?: v) }
+    }
+
+    /**
+     * 遥控器式开机：全量状态 + Pow=1 一条报文下发。
+     * 真机实测（2026-11）：单发 Pow=1 设备不刷新摆风等字段，导风板会停在异常位置
+     * （遥控器开机是全量下发，板子正常往下）。
+     */
+    fun powerOn() {
+        val s = session ?: return
+        if (_state.value.busy) return
+        val opts = fullStateOpts(_state.value.state, mapOf("Pow" to 1))
         viewModelScope.launch {
             _state.value = _state.value.copy(busy = true, error = null)
             try {
@@ -151,6 +161,25 @@ class RemoteViewModel(
                 _state.value = _state.value.copy(state = newState, busy = false)
             } catch (e: Exception) {
                 _state.value = _state.value.copy(busy = false, error = e.message ?: "开机失败")
+            }
+        }
+    }
+
+    /**
+     * 上下风向：全量下发（仅改 SwUpDn），子母导风板机型母板才会联动（真机实测）。
+     */
+    fun setSwingUpDown(value: Int) {
+        val s = session ?: return
+        if (_state.value.busy) return
+        if (_state.value.state.power != 1) return  // 关机不下发（与遥控器一致）
+        val opts = fullStateOpts(_state.value.state, mapOf("SwUpDn" to value))
+        viewModelScope.launch {
+            _state.value = _state.value.copy(busy = true, error = null)
+            try {
+                val newState = container.repository.lanCmdMulti(s, opts)
+                _state.value = _state.value.copy(state = newState, busy = false)
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(busy = false, error = e.message ?: "风向设置失败")
             }
         }
     }
