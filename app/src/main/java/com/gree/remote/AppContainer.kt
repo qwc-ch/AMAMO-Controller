@@ -1,7 +1,7 @@
 package com.gree.remote
 
 import android.content.Context
-import com.gree.remote.data.cloud.CloudSigner
+import com.gree.remote.data.cloud.CloudCryptoInterceptor
 import com.gree.remote.data.cloud.GreeCloudApi
 import com.gree.remote.data.cloud.GreeCloudClient
 import com.gree.remote.data.lan.LanClientPool
@@ -36,6 +36,7 @@ class AppContainer(context: Context) {
         }
         OkHttpClient.Builder()
             .addInterceptor(logging)
+            .addInterceptor(CloudCryptoInterceptor())
             .build()
     }
 

@@ -1,76 +1,35 @@
 package com.gree.remote.data.cloud
 
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import retrofit2.http.Body
 import retrofit2.http.POST
 
 /**
- * 格力云端（国内 grih.gree.com）HTTP 接口。
- * 端点与常量来自公开逆向实现（xuqiu/hass、luc10/gree-api-client），
- * 最终以你自己抓包为准（技术方案 §8）。
+ * 格力云端（国内 grih.gree.com）HTTP 接口，2025-08 起现用协议。
+ *
+ * 请求体为明文 JSON 字符串，由 [CloudCryptoInterceptor] 统一 AES 加密；
+ * 响应 enRes 由拦截器解密成明文 JSON 后再交给 kotlinx-serialization。
+ *
+ * 已验证端点（HTTP 探针，2026-11-27）：
+ *  - App/UserLoginV2                登录 → uid/token
+ *  - App/GetHomes                    家庭列表 → home[]
+ *  - App/GetDevsInRoomsOfHomeV2      设备列表 → rooms[].devs[]
  */
 interface GreeCloudApi {
 
     @POST("App/UserLoginV2")
-    suspend fun login(@Body body: JsonObject): CloudEnvelope<LoginData>
+    suspend fun login(@Body body: JsonObject): LoginData
 
-    @POST("App/GetDevsOfUserHomes")
-    suspend fun getDevs(@Body body: JsonObject): CloudEnvelope<DevsData>
+    @POST("App/GetHomes")
+    suspend fun getHomes(@Body body: JsonObject): HomeData
 
+    @POST("App/GetDevsInRoomsOfHomeV2")
+    suspend fun getDevs(@Body body: JsonObject): DevsData
+
+    /** 场景端点保留（未实测，报文形态同前）。 */
     @POST("App/GetScenes")
-    suspend fun getScenes(@Body body: JsonObject): CloudEnvelope<ScenesData>
+    suspend fun getScenes(@Body body: JsonObject): CloudEnvelope
 
     @POST("App/StartOrCancelScene")
-    suspend fun startScene(@Body body: JsonObject): CloudEnvelope<JsonElement?>
-
-    /**
-     * ⚠️ 项目唯一硬风险：遥控控制命令端点。可能不是这个路径/报文。
-     * 此处是“最可能形态”的占位，必须用 §8 抓包定案后再改。
-     */
-    @POST("App/DevControl")
-    suspend fun devControl(@Body body: JsonObject): CloudEnvelope<JsonElement?>
+    suspend fun startScene(@Body body: JsonObject): CloudEnvelope
 }
-
-/** 统一响应信封。r=200 成功；r=402 token 失效需重登。 */
-@Serializable
-data class CloudEnvelope<T>(
-    @SerialName("r") val code: Int = -1,
-    @SerialName("m") val msg: String = "",
-    @SerialName("dat") val dat: T? = null,
-)
-
-@Serializable
-data class LoginData(
-    @SerialName("uid") val uid: String = "",
-    @SerialName("token") val token: String = "",
-    @SerialName("homeId") val homeId: String = "",
-)
-
-@Serializable
-data class DevsData(
-    @SerialName("homeId") val homeId: String = "",
-    @SerialName("devList") val devList: List<CloudDevice> = emptyList(),
-)
-
-@Serializable
-data class CloudDevice(
-    @SerialName("mac") val mac: String = "",
-    @SerialName("name") val name: String = "",
-    @SerialName("type") val type: String = "",
-    @SerialName("online") val online: Int = 0,
-    @SerialName("model") val model: String = "",
-)
-
-@Serializable
-data class ScenesData(
-    @SerialName("sceneList") val sceneList: List<CloudScene> = emptyList(),
-)
-
-@Serializable
-data class CloudScene(
-    @SerialName("sceneId") val sceneId: String = "",
-    @SerialName("sceneName") val sceneName: String = "",
-)

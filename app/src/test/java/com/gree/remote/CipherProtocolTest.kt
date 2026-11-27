@@ -67,9 +67,10 @@ class CipherProtocolTest {
     }
 
     @Test
-    fun `CloudSigner appId and key match xuqiu gree __init__`() {
-        assertEquals("d15cb842b7fd704ebcf8276f34cbd771", CloudSigner.GREE_KEY)
-        assertEquals("5686063144437916735", CloudSigner.APP_ID)
+    fun `CloudSigner appId and hash match 2025 protocol`() {
+        assertEquals("4920681951525131286", CloudSigner.APP_ID)
+        assertEquals("0fa513124aa97781d1f3f40d61ca1a89", CloudSigner.APP_HASH)
+        assertEquals(16, CloudSigner.AES_KEY.toByteArray().size)
         // psw = md5(md5(md5(pwd)+pwd)+t)，可对拍空串的确定输出
         assertNotNull(CloudSigner.psw("", "2026-11-01 00:00:00"))
     }

@@ -112,22 +112,27 @@ class AcRepository(
     private fun sessionLanClient(session: LanSession): GreeLanClient =
         lanPool.forMac(session.device.mac)
 
-    /** 云端模式：取设备列表。 */
+    /** 云端模式：取设备列表（新接口两步：家庭 → 房间设备）。 */
     suspend fun cloudDevices(): List<AcDevice> =
         withContext(Dispatchers.IO) {
             _activeChannel.value = Channel.CLOUD
-            cloudClient.getDevices().devList.map {
-                AcDevice(
-                    id = it.mac, name = it.name, mac = it.mac,
-                    modelId = it.model, online = it.online == 1,
-                )
+            cloudClient.getDevices().rooms.flatMap { room ->
+                room.devs.map {
+                    AcDevice(
+                        id = it.mac, name = it.name.trim(), mac = it.mac,
+                        modelId = it.model, online = it.online == 1,
+                    )
+                }
             }
         }
 
-    /** 云端模式下下发命令。⚠️ 端点需 §8 抓包定案。 */
+    /**
+     * 云端模式下发命令。⚠️ 新云端协议的控制端点仍需抓包定案（局域网控制不受影响）。
+     * 当前 UI 只用局域网控制，这里保留占位，避免误用。
+     */
     suspend fun cloudCmd(mac: String, opt: String, value: Int) {
         withContext(Dispatchers.IO) {
-            cloudClient.devControl(mac, opt, value)
+            error("云端控制端点尚未定案，请使用局域网直连控制")
         }
     }
 

@@ -6,12 +6,12 @@
 
 ## 特性
 
-- **双通道**：优先局域网 UDP 直连（低延迟、不耗云配额），跨网络可用；云端设备列表同步（可选登录）。云端「控制命令」端点待抓包定案。
+- **云端登录/设备列表**（2025-08 起新协议）：grih.gree.com 请求/响应整体 AES-128-ECB + Base64，签名常量与端点已换代（见「云端协议」节）；云端「控制命令」端点待抓包定案。
 - **V1/V2 加密自动协商**：bind 按固件版本预判代际（>=1.21 优先 V2/AES-GCM），失败自动兜底另一代，适配新旧固件。
 - **多设备并行**：首页每台设备一个分页，每设备独立 UDP 客户端（`LanClientPool`），分页切走自动暂停轮询。
 - **Material 3 Expressive 设计**：HCT 生成的品牌蓝紫配色（回退方案）、表达力字阶/形状、spring 弹性动效（温度弹跳、扫描旋转）、Material You 动态取色（设置页可关）。
 - **免登录启动**：应用直达首页（局域网扫描 + 设备分页），云端登录改为设置页内的可选弹窗。
-- **云端签名**：按公开逆向实现注入 `api/datVc`，支持 402 自动重登。
+- **云端签名**：2025-08 起新协议（AES-ECB 加密信封 + 新 appId/APP_HASH），已用 HTTP 探针验证签名链路；支持 402 自动重登。
 - **构建走云端 CI**（GitHub Actions / CNB），本地不装 Android 环境，push 即出 debug APK。
 
 ## 目录结构
@@ -34,7 +34,8 @@ app/src/main/java/com/gree/remote/
 ```
 
 测试辅助脚本（本机回环，不接触真实空调）：`tools/mock_device.mjs`（模拟 V1/V2 两台设备）、
-`tools/protocol_flow_test.mjs`（协议全流程 13 项断言）、`tools/scan_device.mjs`（真机只读扫描）。
+`tools/protocol_flow_test.mjs`（协议全流程 13 项断言）、`tools/scan_device.mjs`（真机只读扫描）、
+`tools/cloud_login_probe.mjs <账号> <密码>`（云端新协议登录探针，验证签名链路）。
 
 ## 构建
 
@@ -54,6 +55,19 @@ app/src/main/java/com/gree/remote/
 `bootstrap-gradle-wrapper` 步骤：在 CI 上先下载 Gradle 发行版、执行 `gradle wrapper` 生成完整
 wrapper，再走 `./gradlew assembleDebug`。若你在有 Gradle 的机器上执行一次
 `gradle wrapper`，即可把 wrapper jar 提交进仓库，之后 CI 会直接跳过 bootstrap。
+
+## 云端协议（2025-08 起现网协议，已实测签名链路）
+
+旧资料（xuqiu/hass，2019）的明文 JSON + `GREE_KEY` 协议**已失效**；现网 grih.gree.com 用：
+
+- 端点：`App/UserLoginV2`（登录）、`App/GetHomes`（家庭列表）、`App/GetDevsInRoomsOfHomeV2`（设备列表）。
+- 请求体：明文 JSON 经 `AES-128-ECB`（密钥 `#G$&^jgfujy6ujxt`）加密 + Base64，以 form-urlencoded 提交，带 `Gaen1: 5ac2bdf935bcca70` 头。
+- 响应：`{"enRes":"<base64(AES(json))>"}`，需同样解密。
+- 签名：`appId=4920681951525131286`，`vc=md5(appId_APP_HASH_t_r)`（`r` 为秒），`datVc=md5(APP_HASH_字段...)`；`APP_HASH=0fa513124aa97781d1f3f40d61ca1a89`。
+- 登录密码：`psw=md5(md5(md5(pwd)+pwd)+t)`；`t` 与 `api.t` 必须同源同一秒。
+- 参考实现：<https://github.com/luc10/gree-api-client>（2025-08，当前在线）。
+
+用假账号探针返回 `r=411`（用户/密码错）而非 `r=403`（签名错），证明签名与加解密链路正确。真实账号登录待验证。
 
 ## 云端「控制命令」端点是唯一硬风险
 
