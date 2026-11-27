@@ -3,115 +3,58 @@ package com.gree.remote.ui.theme
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.platform.LocalContext
 
 /**
- * 主题入口（Material 3 + MD3E 设计语言）。
- * - API 31+ 默认跟随系统 Material You 动态取色；
- * - 其余情况回退到品牌蓝紫 seed 的表达力明/暗配色（见 [ExpressiveLightColors] / [ExpressiveDarkColors]）。
- * - 形状（Shape.kt）/ 字阶（Type.kt）/ 弹性动效（Motion.kt）不随动态色变化，保证 MD3E 手感。
+ * 是否使用用户自定义 HCT 配色（Shirone 风格）。由 Theme 提供给整棵树，
+ * 主题入口据此决定用 ThemeEngine 生成还是跟随系统 Material You。
+ */
+val LocalDisplayPrefs = staticCompositionLocalOf { DisplayPrefs() }
+
+/** 当前是否暗色主题，供非 Compose 主题上下文（如色卡预览）读取。 */
+@Composable
+fun isDarkTheme(): Boolean = isSystemInDarkTheme()
+
+/**
+ * 主题入口：
+ * - displayCustom=true：用用户选的色相/样式/spec 经 HCT 引擎生成 ColorScheme（Shirone 同源）；
+ * - displayCustom=false 且 API 31+：跟随系统 Material You 动态取色；
+ * - 其余：回落到 ThemeEngine 默认色相（250 / tonalSpot / 2021）。
+ *
+ * 形状/字阶/动效 token 不随配色变化。减少运动偏好通过 LocalDisplayPrefs 下发，
+ * 各动画点读取它决定是否弹跳。
  */
 @Composable
 fun GreeRemoteTheme(
+    displayPrefs: DisplayPrefs = DisplayPrefs(),
+    displayCustom: Boolean = false,
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
+    val useSystemDynamic = !displayCustom && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
+        useSystemDynamic ->
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        darkTheme -> ExpressiveDarkColors
-        else -> ExpressiveLightColors
+        else -> ThemeEngine.colorScheme(
+            hue = displayPrefs.hue,
+            isDark = darkTheme,
+            style = displayPrefs.colorStyle,
+            spec2025 = displayPrefs.spec2025,
+        )
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = AppTypography,
-        shapes = AppShapes,
-        content = content,
-    )
+    CompositionLocalProvider(LocalDisplayPrefs provides displayPrefs) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = AppTypography,
+            shapes = AppShapes,
+            content = content,
+        )
+    }
 }
-
-/** 品牌回退明色方案（seed #4D6BFE，蓝紫）。 */
-private val ExpressiveLightColors = lightColorScheme(
-    primary = BrandBlue40,
-    onPrimary = BrandOnPrimary,
-    primaryContainer = BrandBlue90,
-    onPrimaryContainer = BrandBlue10,
-    inversePrimary = BrandBlue80,
-    secondary = BrandSlate40,
-    onSecondary = BrandOnSecondary,
-    secondaryContainer = BrandSlate90,
-    onSecondaryContainer = BrandSlate10,
-    tertiary = BrandTeal40,
-    onTertiary = BrandOnTertiary,
-    tertiaryContainer = BrandTeal90,
-    onTertiaryContainer = BrandTeal10,
-    background = Neutral99,
-    onBackground = Neutral10,
-    surface = Neutral99,
-    onSurface = Neutral10,
-    surfaceVariant = NeutralVariant90,
-    onSurfaceVariant = NeutralVariant30,
-    outline = NeutralVariant50,
-    outlineVariant = NeutralVariant80,
-    scrim = Scrim,
-    inverseSurface = Neutral20,
-    inverseOnSurface = Neutral95,
-    error = Error40,
-    onError = Error100,
-    errorContainer = Error90,
-    onErrorContainer = Error10,
-    surfaceBright = Neutral98,
-    surfaceDim = Neutral90,
-    surfaceContainerLowest = SurfaceContainerLowestLight,
-    surfaceContainerLow = SurfaceContainerLowLight,
-    surfaceContainer = SurfaceContainerLight,
-    surfaceContainerHigh = SurfaceContainerHighLight,
-    surfaceContainerHighest = SurfaceContainerHighestLight,
-)
-
-/** 品牌回退暗色方案（与明色同一 seed）。 */
-private val ExpressiveDarkColors = darkColorScheme(
-    primary = BrandBlue80,
-    onPrimary = BrandBlue20,
-    primaryContainer = BrandBlue30,
-    onPrimaryContainer = BrandBlue90,
-    inversePrimary = BrandBlue40,
-    secondary = BrandSlate80,
-    onSecondary = BrandSlate20,
-    secondaryContainer = BrandSlate30,
-    onSecondaryContainer = BrandSlate90,
-    tertiary = BrandTeal80,
-    onTertiary = BrandTeal20,
-    tertiaryContainer = BrandTeal30,
-    onTertiaryContainer = BrandTeal90,
-    background = Neutral10,
-    onBackground = Neutral90,
-    surface = Neutral10,
-    onSurface = Neutral90,
-    surfaceVariant = NeutralVariant30,
-    onSurfaceVariant = NeutralVariant80,
-    outline = NeutralVariant60,
-    outlineVariant = NeutralVariant30,
-    scrim = Scrim,
-    inverseSurface = Neutral90,
-    inverseOnSurface = Neutral20,
-    error = Error80,
-    onError = Error20,
-    errorContainer = Error30,
-    onErrorContainer = Error90,
-    surfaceBright = Neutral24,
-    surfaceDim = Neutral6,
-    surfaceContainerLowest = SurfaceContainerLowestDark,
-    surfaceContainerLow = SurfaceContainerLowDark,
-    surfaceContainer = SurfaceContainerDark,
-    surfaceContainerHigh = SurfaceContainerHighDark,
-    surfaceContainerHighest = SurfaceContainerHighestDark,
-)

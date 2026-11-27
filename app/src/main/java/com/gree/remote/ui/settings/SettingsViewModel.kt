@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.gree.remote.AppContainer
 import com.gree.remote.data.model.AcDevice
+import com.gree.remote.ui.theme.DisplayPrefs
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -16,16 +17,16 @@ data class SettingsUiState(
     val cloudLoading: Boolean = false,
     val cloudDevices: List<AcDevice> = emptyList(),
     val cloudError: String? = null,
-    // 登录弹窗
     val showLogin: Boolean = false,
     val loginBusy: Boolean = false,
     val loginError: String? = null,
-    // 通用
-    val dynamicColor: Boolean = true,
+    // 显示偏好（Shirone 风格全部选项）
+    val displayPrefs: DisplayPrefs = DisplayPrefs(),
+    val displayCustom: Boolean = false,
 )
 
 /**
- * 设置页 ViewModel：通用偏好（动态取色）+ 云端账号（登录/登出/设备列表）。
+ * 设置页 ViewModel：显示偏好（色相/样式/spec/背景/布局/纹理/动效）+ 云端账号。
  */
 class SettingsViewModel(private val container: AppContainer) : ViewModel() {
 
@@ -36,16 +37,38 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
 
     init {
         viewModelScope.launch {
-            container.dynamicColor.collect { enabled ->
-                _state.update { it.copy(dynamicColor = enabled) }
+            container.displayPrefs.collect { prefs ->
+                _state.update { it.copy(displayPrefs = prefs) }
+            }
+        }
+        viewModelScope.launch {
+            container.displayCustom.collect { custom ->
+                _state.update { it.copy(displayCustom = custom) }
             }
         }
     }
 
-    /** 动态取色开关（Material You，API 31+ 生效）。 */
-    fun setDynamicColor(enabled: Boolean) {
-        viewModelScope.launch { container.setDynamicColor(enabled) }
+    // ---- 显示偏好 ----
+
+    fun setDisplayCustom(enabled: Boolean) = viewModelScope.launch { container.setDisplayCustom(enabled) }
+    fun setDisplayHue(hue: Float) = viewModelScope.launch { container.setDisplayHue(hue) }
+    fun setDisplayStyle(style: String) = viewModelScope.launch { container.setDisplayStyle(style) }
+    fun setDisplaySpec2025(enabled: Boolean) = viewModelScope.launch { container.setDisplaySpec2025(enabled) }
+    fun setDisplayWallpaper(mode: String) = viewModelScope.launch { container.setDisplayWallpaper(mode) }
+    fun setDisplayLayout(mode: String) = viewModelScope.launch { container.setDisplayLayout(mode) }
+    fun setDisplayTexture(preset: String) = viewModelScope.launch { container.setDisplayTexture(preset) }
+    fun setDisplayTextureOpacity(opacity: Float) = viewModelScope.launch { container.setDisplayTextureOpacity(opacity) }
+    fun setDisplayReduceMotion(enabled: Boolean) = viewModelScope.launch { container.setDisplayReduceMotion(enabled) }
+    fun resetDisplayPrefs() = viewModelScope.launch { container.resetDisplayPrefs() }
+
+    /** 是否有偏离默认值的选择（控制重置按钮可见性）。 */
+    fun isDisplayDirty(): Boolean {
+        val s = _state.value
+        return s.displayCustom ||
+            s.displayPrefs != DisplayPrefs()
     }
+
+    // ---- 云端账号 ----
 
     fun loadCloudDevices() {
         if (!_state.value.cloudLoggedIn) {

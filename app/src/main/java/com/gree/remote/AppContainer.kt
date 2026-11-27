@@ -8,6 +8,7 @@ import com.gree.remote.data.lan.LanClientPool
 import com.gree.remote.data.repo.AcRepository
 import com.gree.remote.data.storage.PrefsStore
 import com.gree.remote.data.storage.SecureStorage
+import com.gree.remote.ui.theme.DisplayPrefs
 import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
@@ -84,12 +85,21 @@ class AppContainer(context: Context) {
         secure.remove(KEY_PASS)
     }
 
-    /** 动态取色（Material You）偏好，供设置页开关。 */
-    val dynamicColor: Flow<Boolean> = prefs.dynamicColor
+    // ---- 显示偏好（Shirone 风格全部选项） ----
 
-    suspend fun setDynamicColor(enabled: Boolean) {
-        prefs.setDynamicColor(enabled)
-    }
+    val displayCustom: Flow<Boolean> = prefs.displayCustom
+    val displayPrefs: Flow<DisplayPrefs> = prefs.displayPrefs
+
+    suspend fun setDisplayCustom(enabled: Boolean) = prefs.setDisplayCustom(enabled)
+    suspend fun setDisplayHue(hue: Float) = prefs.setDisplayHue(hue)
+    suspend fun setDisplayStyle(style: String) = prefs.setDisplayStyle(style)
+    suspend fun setDisplaySpec2025(enabled: Boolean) = prefs.setDisplaySpec2025(enabled)
+    suspend fun setDisplayWallpaper(mode: String) = prefs.setDisplayWallpaper(mode)
+    suspend fun setDisplayLayout(mode: String) = prefs.setDisplayLayout(mode)
+    suspend fun setDisplayTexture(preset: String) = prefs.setDisplayTexture(preset)
+    suspend fun setDisplayTextureOpacity(opacity: Float) = prefs.setDisplayTextureOpacity(opacity)
+    suspend fun setDisplayReduceMotion(enabled: Boolean) = prefs.setDisplayReduceMotion(enabled)
+    suspend fun resetDisplayPrefs() = prefs.resetDisplayPrefs()
 
     companion object {
         private const val KEY_USER = "cloud_user"

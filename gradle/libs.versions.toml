@@ -5,6 +5,7 @@ coreKtx = "1.13.1"
 activityCompose = "1.9.2"
 lifecycle = "2.8.6"
 composeBom = "2025.06.01"
+materialColorUtilities = "1.7.1"
 coroutines = "1.8.1"
 serialization = "1.7.3"
 retrofit = "2.11.0"
@@ -35,6 +36,8 @@ compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling
 compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
 compose-foundation = { group = "androidx.compose.foundation", name = "foundation" }
 compose-material3 = { group = "androidx.compose.material3", name = "material3" }
+compose-material3-window-size-class = { group = "androidx.compose.material3", name = "material3-window-size-class" }
+material-color-utilities = { group = "com.materialkolor", name = "material-color-utilities", version.ref = "materialColorUtilities" }
 compose-material-icons-core = { group = "androidx.compose.material", name = "material-icons-core", version.ref = "materialIconsCore" }
 compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended", version.ref = "materialIconsCore" }
 

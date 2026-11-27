@@ -7,9 +7,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
 /**
- * MD3E 表达力字阶（稳定线 15 档）：
- * - 大标题加大字重，制造编辑式层级（MD3E "variable typography" 思路）；
- * - display 档用于温度大数字，是遥控页的视觉锚点。
+ * Material 3 15 档字阶（对齐 Shirone 的 typography 契约）：
+ * - 尺寸 / 行高严格使用 M3 基线，保证系统 200% 字体缩放下层级仍成立；
+ * - weight 用于制造“表达力”层级：display/headline 重，body/label 轻；
+ * - display 仅用于温度 hero，不泄漏到紧凑控件。
  */
 val AppTypography = Typography(
     displayLarge = TextStyle(
@@ -56,7 +57,7 @@ val AppTypography = Typography(
     ),
     titleLarge = TextStyle(
         fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.SemiBold,
+        fontWeight = FontWeight.Medium,
         fontSize = 22.sp,
         lineHeight = 28.sp,
         letterSpacing = 0.sp,

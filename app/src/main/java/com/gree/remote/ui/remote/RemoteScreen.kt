@@ -9,14 +9,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
@@ -38,7 +37,12 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.gree.remote.data.model.AcState
+import com.gree.remote.ui.components.EditorialCard
+import com.gree.remote.ui.components.SectionLabel
+import com.gree.remote.ui.components.StatusBadge
+import com.gree.remote.ui.components.StatusTone
 import com.gree.remote.ui.theme.ExpressiveMotion
+import com.gree.remote.ui.theme.LocalDisplayPrefs
 import com.gree.remote.ui.theme.PillShape
 import java.util.Locale
 
@@ -66,33 +70,30 @@ fun RemotePanel(vm: RemoteViewModel, deviceName: String, deviceIp: String) {
         modifier = Modifier
             .fillMaxWidth()
             .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         // ---- 头部：名称 + IP + 状态 ----
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(deviceName, style = MaterialTheme.typography.titleMedium)
-                Text(
-                    deviceIp,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            when {
-                s.connecting -> {
-                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                    Spacer(Modifier.padding(2.dp))
-                    Text("连接中", style = MaterialTheme.typography.labelMedium)
+        EditorialCard {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(deviceName, style = MaterialTheme.typography.titleLarge)
+                    Text(
+                        deviceIp,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
-                s.connected -> Text(
-                    "已连接",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                else -> Text(
-                    "未连接",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.error,
+                when {
+                    s.connecting -> StatusBadge("连接中", tone = StatusTone.Neutral)
+                    s.connected -> StatusBadge("已连接", tone = StatusTone.Success)
+                    else -> StatusBadge("未连接", tone = StatusTone.Error)
+                }
+            }
+            if (s.connecting) {
+                Spacer(Modifier.height(12.dp))
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    strokeWidth = 2.dp,
                 )
             }
         }
@@ -107,7 +108,7 @@ fun RemotePanel(vm: RemoteViewModel, deviceName: String, deviceIp: String) {
                 Button(
                     onClick = vm::reconnect,
                     shape = PillShape,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                 ) { Text("重试连接") }
             }
             else -> ConnectedControls(vm, s)
@@ -117,19 +118,21 @@ fun RemotePanel(vm: RemoteViewModel, deviceName: String, deviceIp: String) {
 
 @Composable
 private fun ConnectingPlaceholder() {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        CircularProgressIndicator()
-        Spacer(Modifier.height(12.dp))
-        Text(
-            "正在连接局域网空调…",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+    EditorialCard {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            CircularProgressIndicator()
+            Spacer(Modifier.height(12.dp))
+            Text(
+                "正在连接局域网空调…",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 
@@ -139,18 +142,10 @@ private fun ConnectingPlaceholder() {
 private fun ConnectedControls(vm: RemoteViewModel, s: RemoteUiState) {
     val st = s.state
     val powered = st.power == 1
+    val gridLayout = LocalDisplayPrefs.current.layoutMode == "grid"
 
     // ---- 电源 hero 卡 ----
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
-        colors = CardDefaults.cardColors(
-            containerColor = if (powered) MaterialTheme.colorScheme.primaryContainer
-            else MaterialTheme.colorScheme.surfaceContainerLow,
-            contentColor = if (powered) MaterialTheme.colorScheme.onPrimaryContainer
-            else MaterialTheme.colorScheme.onSurfaceVariant,
-        ),
-    ) {
+    EditorialCard {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -160,14 +155,15 @@ private fun ConnectedControls(vm: RemoteViewModel, s: RemoteUiState) {
             Column(Modifier.weight(1f)) {
                 Text(
                     if (powered) "运行中" else "已关机",
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.headlineSmall,
                 )
                 val modeLabel = modes.firstOrNull { it.first == st.mode }?.second ?: "自动"
                 val fanLabel = fanSpeeds.firstOrNull { it.first == st.windSpeed }?.second ?: "档位${st.windSpeed}"
                 Text(
                     if (powered) "$modeLabel · 风速 $fanLabel"
                     else "打开开关启动空调",
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             Switch(
@@ -194,53 +190,53 @@ private fun ConnectedControls(vm: RemoteViewModel, s: RemoteUiState) {
     TempControlCard(vm, st, busy = s.busy)
 
     // ---- 模式 ----
-    Text("模式", style = MaterialTheme.typography.titleSmall)
-    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-        modes.forEachIndexed { index, (value, label) ->
-            SegmentedButton(
-                selected = st.mode == value,
-                onClick = { vm.send("Mod", value) },
-                shape = SegmentedButtonDefaults.itemShape(index = index, count = modes.size),
-                enabled = !s.busy,
-                label = { Text(label, style = MaterialTheme.typography.labelMedium) },
-            )
+    ControlSection(title = "模式") {
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            modes.forEachIndexed { index, (value, label) ->
+                SegmentedButton(
+                    selected = st.mode == value,
+                    onClick = { vm.send("Mod", value) },
+                    shape = SegmentedButtonDefaults.itemShape(index = index, count = modes.size),
+                    enabled = !s.busy,
+                    label = { Text(label, style = MaterialTheme.typography.labelMedium) },
+                )
+            }
         }
     }
 
     // ---- 风速 ----
-    Text("风速", style = MaterialTheme.typography.titleSmall)
-    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-        fanSpeeds.forEachIndexed { index, (value, label) ->
-            SegmentedButton(
-                selected = st.windSpeed == value,
-                onClick = { vm.send("WdSpd", value) },
-                shape = SegmentedButtonDefaults.itemShape(index = index, count = fanSpeeds.size),
-                enabled = !s.busy,
-                label = { Text(label, style = MaterialTheme.typography.labelMedium) },
-            )
+    ControlSection(title = "风速") {
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            fanSpeeds.forEachIndexed { index, (value, label) ->
+                SegmentedButton(
+                    selected = st.windSpeed == value,
+                    onClick = { vm.send("WdSpd", value) },
+                    shape = SegmentedButtonDefaults.itemShape(index = index, count = fanSpeeds.size),
+                    enabled = !s.busy,
+                    label = { Text(label, style = MaterialTheme.typography.labelMedium) },
+                )
+            }
         }
     }
 
     // ---- 上下风向（SwUpDn 档位单选，标准表 0~6；真机实测 6 = 最下）----
-    // 子母导风板机型必须全量下发（setSwingUpDown），单字段只动子板、母板不动。
-    Text("上下风向", style = MaterialTheme.typography.titleSmall)
-    FlowRow(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        swingPositions.forEach { (value, label) ->
-            FilterChip(
-                selected = st.swingUpDown == value,
-                onClick = { vm.setSwingUpDown(value) },
-                enabled = !s.busy,
-                label = { Text(label) },
-            )
+    ControlSection(title = "上下风向") {
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            swingPositions.forEach { (value, label) ->
+                FilterChip(
+                    selected = st.swingUpDown == value,
+                    onClick = { vm.setSwingUpDown(value) },
+                    enabled = !s.busy,
+                    label = { Text(label) },
+                )
+            }
         }
     }
 
     // ---- 功能开关（FilterChip 组） ----
-    // 注：SwUpDn/SwingLfRig 仅 1 表示全程扫风，2~6 是固定角度档（标准表），
-    // 故"左右扫风"以 == 1 判断；上下风向已用档位单选呈现，不放开关。
     val toggles = listOf(
         ToggleDef("强劲", st.turbo == 1) { vm.send("Tur", if (st.turbo == 1) 0 else 1) },
         ToggleDef("静音", st.quiet == 1) { vm.send("Quiet", if (st.quiet == 1) 0 else 1) },
@@ -249,18 +245,32 @@ private fun ConnectedControls(vm: RemoteViewModel, s: RemoteUiState) {
         ToggleDef("干燥防霉", st.blowDry == 1) { vm.send("Blo", if (st.blowDry == 1) 0 else 1) },
         ToggleDef("负离子", st.health == 1) { vm.send("Health", if (st.health == 1) 0 else 1) },
     )
-    FlowRow(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        toggles.forEach { t ->
-            FilterChip(
-                selected = t.checked,
-                onClick = t.onToggle,
-                enabled = !s.busy,
-                label = { Text(t.label) },
-            )
+    ControlSection(title = "功能") {
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            maxItemsInEachRow = if (gridLayout) 2 else Int.MAX_VALUE,
+        ) {
+            toggles.forEach { t ->
+                FilterChip(
+                    selected = t.checked,
+                    onClick = t.onToggle,
+                    enabled = !s.busy,
+                    modifier = if (gridLayout) Modifier.fillMaxWidth(0.48f) else Modifier,
+                    label = { Text(t.label) },
+                )
+            }
         }
+    }
+}
+
+/** 控件分区：标题 + 内容，用 8dp 网格节奏。 */
+@Composable
+private fun ControlSection(title: String, content: @Composable () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        SectionLabel(title)
+        content()
     }
 }
 
@@ -272,7 +282,7 @@ private data class ToggleDef(
 )
 
 /**
- * 温度控制卡：大数字弹跳动效（MD3E 时刻）+ ± 步进。
+ * 温度控制卡：大数字弹跳动效（MD3E hero 时刻）+ ± 步进。
  * 支持 TemRec 半度的设备按 0.5℃ 步进，否则 1℃。
  */
 @Composable
@@ -281,27 +291,27 @@ private fun TempControlCard(vm: RemoteViewModel, st: AcState, busy: Boolean) {
     val current = st.decodedSetTemp()
     val tempText = String.format(Locale.US, "%.1f", current).removeSuffix(".0")
 
-    // 温度变化时的弹跳强调
+    // 温度变化时的弹跳强调（用户开启减少运动时直接跳过动画）
+    val displayPrefs = LocalDisplayPrefs.current
     val scale = remember { Animatable(1f) }
-    LaunchedEffect(tempText) {
-        scale.snapTo(0.9f)
-        scale.animateTo(1f, ExpressiveMotion.BouncySpatial)
+    LaunchedEffect(tempText, displayPrefs.reduceMotion) {
+        if (displayPrefs.reduceMotion) {
+            scale.snapTo(1f)
+        } else {
+            scale.snapTo(0.9f)
+            scale.animateTo(1f, ExpressiveMotion.BouncySpatial)
+        }
     }
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-        ),
-    ) {
+    EditorialCard {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp),
+                .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text("设定温度", style = MaterialTheme.typography.titleSmall)
+            SectionLabel("设定温度")
+            Spacer(Modifier.height(8.dp))
             Text(
                 "$tempText℃",
                 style = MaterialTheme.typography.displayMedium,
@@ -311,13 +321,14 @@ private fun TempControlCard(vm: RemoteViewModel, st: AcState, busy: Boolean) {
                 },
             )
             st.decodedRoomTemp()?.let {
+                Spacer(Modifier.height(8.dp))
                 AssistChip(
                     onClick = {},
                     enabled = false,
                     label = { Text("室温 $it℃") },
                 )
             }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(20.dp))
             Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -326,14 +337,17 @@ private fun TempControlCard(vm: RemoteViewModel, st: AcState, busy: Boolean) {
                     onClick = { vm.setTemp(current - step) },
                     enabled = !busy && current > RemoteViewModel.MIN_TEMP,
                     shape = PillShape,
+                    modifier = Modifier.heightIn(min = 56.dp),
                 ) { Text("−", style = MaterialTheme.typography.titleLarge) }
                 FilledTonalButton(
                     onClick = { vm.setTemp(current + step) },
                     enabled = !busy && current < RemoteViewModel.MAX_TEMP,
                     shape = PillShape,
+                    modifier = Modifier.heightIn(min = 56.dp),
                 ) { Text("+", style = MaterialTheme.typography.titleLarge) }
             }
             if (st.supportsHalfDegree()) {
+                Spacer(Modifier.height(8.dp))
                 Text(
                     "支持 0.5℃ 步进",
                     style = MaterialTheme.typography.labelSmall,
